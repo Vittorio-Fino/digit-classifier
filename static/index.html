@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Digit Classifier</title>
+  <title>Number Classifier</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -15,6 +15,7 @@
       background: #0f0f13;
       font-family: 'Segoe UI', system-ui, sans-serif;
       color: #e2e8f0;
+      padding: 1rem;
     }
 
     .card {
@@ -22,7 +23,8 @@
       border: 1px solid #2d2d3d;
       border-radius: 16px;
       padding: 2rem;
-      width: 420px;
+      width: 100%;
+      max-width: 700px;
       display: flex;
       flex-direction: column;
       gap: 1.25rem;
@@ -100,7 +102,7 @@
     #btn-clear:hover { background: #2d2d45; color: #e2e8f0; }
 
     .result {
-      min-height: 80px;
+      min-height: 90px;
       border-radius: 10px;
       background: #13131c;
       border: 1px solid #2d2d3d;
@@ -108,41 +110,46 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 0.4rem;
+      gap: 0.5rem;
       transition: all 0.3s;
+      padding: 1rem;
     }
 
     .result.loading { border-color: #6366f1; }
     .result.success { border-color: #22c55e; }
     .result.error   { border-color: #ef4444; }
 
-    .result-main {
-      font-size: 2.5rem;
+    .result-number {
+      font-size: 3rem;
       font-weight: 700;
       color: #6366f1;
       line-height: 1;
+      letter-spacing: 0.05em;
     }
 
-    .result-conf {
-      font-size: 0.8rem;
-      color: #7070a0;
-    }
-
-    .top3 {
+    .digit-breakdown {
       display: flex;
-      gap: 0.5rem;
-      margin-top: 0.25rem;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+      justify-content: center;
     }
 
-    .top3-item {
+    .digit-chip {
       background: #252535;
       border-radius: 6px;
-      padding: 0.25rem 0.6rem;
+      padding: 0.2rem 0.55rem;
       font-size: 0.75rem;
       color: #a0a0c0;
+      text-align: center;
+      line-height: 1.6;
     }
 
-    .top3-item span { color: #e2e8f0; font-weight: 600; }
+    .digit-chip .d {
+      display: block;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #e2e8f0;
+    }
 
     .placeholder-text {
       font-size: 0.85rem;
@@ -163,11 +170,11 @@
 </head>
 <body>
   <div class="card">
-    <h1>Digit Classifier</h1>
+    <h1>Number Classifier</h1>
 
     <div class="canvas-wrapper" id="canvas-wrapper">
-      <canvas id="canvas" width="392" height="392"></canvas>
-      <div class="hint" id="hint">Draw a digit (0 – 9)</div>
+      <canvas id="canvas" width="700" height="220"></canvas>
+      <div class="hint" id="hint">Draw a number — single digit or multi-digit (e.g. 42, 137)</div>
     </div>
 
     <div class="controls">
@@ -188,7 +195,6 @@
     const btnPredict = document.getElementById('btn-predict');
     const btnClear = document.getElementById('btn-clear');
 
-    // Black background
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -220,7 +226,7 @@
       const { x, y } = pos(e);
       ctx.lineTo(x, y);
       ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 26;
+      ctx.lineWidth = 22;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.stroke();
@@ -269,15 +275,14 @@
 
         if (data.error) throw new Error(data.error);
 
+        const chips = data.digits.map(d =>
+          `<div class="digit-chip"><span class="d">${d.digit}</span>${d.confidence}%</div>`
+        ).join('');
+
         result.className = 'result success';
         result.innerHTML = `
-          <div class="result-main">${data.prediction}</div>
-          <div class="result-conf">Confidence: ${data.confidence}%</div>
-          <div class="top3">
-            ${data.top3.map(t =>
-              `<div class="top3-item"><span>${t.digit}</span> ${t.prob}%</div>`
-            ).join('')}
-          </div>
+          <div class="result-number">${data.number}</div>
+          <div class="digit-breakdown">${chips}</div>
         `;
       } catch (err) {
         result.className = 'result error';
