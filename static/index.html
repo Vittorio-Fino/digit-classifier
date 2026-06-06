@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Digit Classifier</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0f0f13;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      color: #e2e8f0;
+    }
+
+    .card {
+      background: #1a1a24;
+      border: 1px solid #2d2d3d;
+      border-radius: 16px;
+      padding: 2rem;
+      width: 420px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: #f1f5f9;
+      text-align: center;
+    }
+
+    .canvas-wrapper {
+      position: relative;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 2px solid #3d3d55;
+      cursor: crosshair;
+      transition: border-color 0.2s;
+    }
+
+    .canvas-wrapper:hover { border-color: #6366f1; }
+
+    canvas {
+      display: block;
+      width: 100%;
+      touch-action: none;
+    }
+
+    .hint {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      font-size: 0.85rem;
+      color: #4a4a6a;
+      transition: opacity 0.3s;
+    }
+
+    .controls {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    button {
+      flex: 1;
+      padding: 0.65rem 1rem;
+      border-radius: 8px;
+      border: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    #btn-predict {
+      background: #6366f1;
+      color: #fff;
+    }
+
+    #btn-predict:hover { background: #4f46e5; }
+    #btn-predict:active { transform: scale(0.97); }
+    #btn-predict:disabled { background: #3d3d55; color: #7070a0; cursor: not-allowed; }
+
+    #btn-clear {
+      background: #252535;
+      color: #a0a0c0;
+      border: 1px solid #3d3d55;
+    }
+
+    #btn-clear:hover { background: #2d2d45; color: #e2e8f0; }
+
+    .result {
+      min-height: 80px;
+      border-radius: 10px;
+      background: #13131c;
+      border: 1px solid #2d2d3d;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      transition: all 0.3s;
+    }
+
+    .result.loading { border-color: #6366f1; }
+    .result.success { border-color: #22c55e; }
+    .result.error   { border-color: #ef4444; }
+
+    .result-main {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: #6366f1;
+      line-height: 1;
+    }
+
+    .result-conf {
+      font-size: 0.8rem;
+      color: #7070a0;
+    }
+
+    .top3 {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.25rem;
+    }
+
+    .top3-item {
+      background: #252535;
+      border-radius: 6px;
+      padding: 0.25rem 0.6rem;
+      font-size: 0.75rem;
+      color: #a0a0c0;
+    }
+
+    .top3-item span { color: #e2e8f0; font-weight: 600; }
+
+    .placeholder-text {
+      font-size: 0.85rem;
+      color: #4a4a6a;
+    }
+
+    .spinner {
+      width: 24px;
+      height: 24px;
+      border: 3px solid #3d3d55;
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Digit Classifier</h1>
+
+    <div class="canvas-wrapper" id="canvas-wrapper">
+      <canvas id="canvas" width="392" height="392"></canvas>
+      <div class="hint" id="hint">Draw a digit (0 – 9)</div>
+    </div>
+
+    <div class="controls">
+      <button id="btn-predict" disabled>Classify</button>
+      <button id="btn-clear">Clear</button>
+    </div>
+
+    <div class="result" id="result">
+      <span class="placeholder-text">Result will appear here</span>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const hint = document.getElementById('hint');
+    const result = document.getElementById('result');
+    const btnPredict = document.getElementById('btn-predict');
+    const btnClear = document.getElementById('btn-clear');
+
+    // Black background
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    let drawing = false;
+    let hasContent = false;
+
+    function pos(e) {
+      const r = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / r.width;
+      const scaleY = canvas.height / r.height;
+      const src = e.touches ? e.touches[0] : e;
+      return {
+        x: (src.clientX - r.left) * scaleX,
+        y: (src.clientY - r.top) * scaleY,
+      };
+    }
+
+    function startDraw(e) {
+      e.preventDefault();
+      drawing = true;
+      const { x, y } = pos(e);
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+    }
+
+    function draw(e) {
+      if (!drawing) return;
+      e.preventDefault();
+      const { x, y } = pos(e);
+      ctx.lineTo(x, y);
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 26;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+
+      if (!hasContent) {
+        hasContent = true;
+        hint.style.opacity = '0';
+        btnPredict.disabled = false;
+      }
+    }
+
+    function stopDraw() { drawing = false; }
+
+    canvas.addEventListener('mousedown', startDraw);
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', stopDraw);
+    canvas.addEventListener('mouseleave', stopDraw);
+    canvas.addEventListener('touchstart', startDraw, { passive: false });
+    canvas.addEventListener('touchmove', draw, { passive: false });
+    canvas.addEventListener('touchend', stopDraw);
+
+    btnClear.addEventListener('click', () => {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      hasContent = false;
+      hint.style.opacity = '1';
+      btnPredict.disabled = true;
+      result.className = 'result';
+      result.innerHTML = '<span class="placeholder-text">Result will appear here</span>';
+    });
+
+    btnPredict.addEventListener('click', async () => {
+      btnPredict.disabled = true;
+      result.className = 'result loading';
+      result.innerHTML = '<div class="spinner"></div>';
+
+      const dataUrl = canvas.toDataURL('image/png');
+
+      try {
+        const res = await fetch('/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: dataUrl }),
+        });
+        const data = await res.json();
+
+        if (data.error) throw new Error(data.error);
+
+        result.className = 'result success';
+        result.innerHTML = `
+          <div class="result-main">${data.prediction}</div>
+          <div class="result-conf">Confidence: ${data.confidence}%</div>
+          <div class="top3">
+            ${data.top3.map(t =>
+              `<div class="top3-item"><span>${t.digit}</span> ${t.prob}%</div>`
+            ).join('')}
+          </div>
+        `;
+      } catch (err) {
+        result.className = 'result error';
+        result.innerHTML = `<span style="color:#ef4444;font-size:.85rem">${err.message}</span>`;
+      } finally {
+        btnPredict.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
